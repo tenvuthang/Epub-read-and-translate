@@ -1,0 +1,25 @@
+.reader-wrapper {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.reader-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* EPUB.js injects an iframe; make it fill 100% width */
+.reader-container iframe {
+  width: 100% !important;
+  border: none !important;
+}
+
+/* Scrolled mode: the viewer div inside */
+.reader-container .epub-container {
+  width: 100% !important;
+}
