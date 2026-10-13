@@ -24,42 +24,78 @@ export class EpubJsEngine implements ReaderEngine {
   private rendition: Rendition | null = null;
   private toc: TocItem[] = [];
   private currentCfi: string | null = null;
+  private goToSeq = 0;
 
   async open(data: ArrayBuffer, container: HTMLElement): Promise<TocItem[]> {
     // Clean up any previous book
     this.destroy();
 
-    this.book = ePub(data);
+    // 1. Kiểm tra 4 byte đầu (PK zip magic bytes: 0x50 0x4B 0x03 0x04)
+    if (data.byteLength < 4) {
+      throw new Error("File không phải EPUB hợp lệ");
+    }
+    const header = new Uint8Array(data, 0, 4);
+    if (
+      header[0] !== 0x50 ||
+      header[1] !== 0x4b ||
+      header[2] !== 0x03 ||
+      header[3] !== 0x04
+    ) {
+      throw new Error("File không phải EPUB hợp lệ");
+    }
 
-    // Wait for book metadata and navigation to load
-    await this.book.ready;
-    await this.book.loaded.navigation;
+    const book = ePub(data);
+    this.book = book;
 
-    // Map TOC
-    const nav = this.book.navigation;
-    this.toc = nav?.toc ? mapNavItems(nav.toc) : [];
-
-    // Create rendition: scrolled continuous mode (ADR-007)
-    this.rendition = this.book.renderTo(container, {
-      width: "100%",
-      height: "100%",
-      flow: "scrolled",
-      manager: "continuous",
-      spread: "none",
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("Không đọc được file EPUB (quá thời gian chờ)"));
+      }, 20000);
     });
 
-    // Track location changes for CFI persistence
-    this.rendition.on(
-      "relocated",
-      (location: { start: { cfi: string } }) => {
-        if (location?.start?.cfi) {
-          this.currentCfi = location.start.cfi;
-        }
-      }
-    );
+    const openPromise = (async () => {
+      // Wait for book metadata and navigation to load
+      await book.ready;
+      await book.loaded.navigation;
 
-    await this.rendition.display();
-    return this.toc;
+      // Map TOC
+      const nav = book.navigation;
+      this.toc = nav?.toc ? mapNavItems(nav.toc) : [];
+
+      // Create rendition: scrolled continuous mode (ADR-007)
+      this.rendition = book.renderTo(container, {
+        width: "100%",
+        height: "100%",
+        flow: "scrolled",
+        manager: "continuous",
+        spread: "none",
+      });
+
+      // Track location changes for CFI persistence
+      this.rendition.on(
+        "relocated",
+        (location: { start: { cfi: string } }) => {
+          if (location?.start?.cfi) {
+            this.currentCfi = location.start.cfi;
+          }
+        }
+      );
+
+      await this.rendition.display();
+      return this.toc;
+    })();
+
+    try {
+      return await Promise.race([openPromise, timeoutPromise]);
+    } catch (err) {
+      this.destroy();
+      throw err;
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   async next(): Promise<void> {
@@ -71,7 +107,83 @@ export class EpubJsEngine implements ReaderEngine {
   }
 
   async goTo(target: string): Promise<void> {
-    await this.rendition?.display(target);
+    if (!this.rendition) return;
+
+    const seq = ++this.goToSeq;
+    await this.rendition.display(target);
+
+    if (seq !== this.goToSeq || !this.rendition) return;
+    await this.realignAfterImagesLoadOnce(target, seq);
+  }
+
+  /**
+   * Chờ ảnh trong các section đang hiển thị tải xong (kèm timeout an toàn),
+   * cập nhật lại kích thước view rồi căn chỉnh về mục tiêu tối đa MỘT lần.
+   */
+  private async realignAfterImagesLoadOnce(
+    target: string,
+    seq: number
+  ): Promise<void> {
+    if (!this.rendition || seq !== this.goToSeq) return;
+
+    const contentsList =
+      (this.rendition.getContents() as unknown as Array<{
+        document?: Document;
+        expand?: () => void;
+      }>) ?? [];
+
+    const pendingImages: HTMLImageElement[] = [];
+    for (const content of contentsList) {
+      const imgs = content?.document?.querySelectorAll("img");
+      if (imgs) {
+        imgs.forEach((img) => {
+          if (!img.complete) {
+            pendingImages.push(img);
+          }
+        });
+      }
+    }
+
+    if (pendingImages.length > 0) {
+      await Promise.race([
+        Promise.all(
+          pendingImages.map(
+            (img) =>
+              new Promise<void>((resolve) => {
+                const done = () => {
+                  img.removeEventListener("load", done);
+                  img.removeEventListener("error", done);
+                  resolve();
+                };
+                img.addEventListener("load", done, { once: true });
+                img.addEventListener("error", done, { once: true });
+              })
+          )
+        ),
+        new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    }
+
+    if (!this.rendition || seq !== this.goToSeq) return;
+
+    // Kích hoạt expand() trên các contents để IframeView cập nhật chiều cao thật sau khi ảnh tải xong
+    for (const content of contentsList) {
+      try {
+        content.expand?.();
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    // Nhường 2 nhịp animation frame để ResizeObserver và DOM hoàn tất reflow
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    );
+
+    if (!this.rendition || seq !== this.goToSeq) return;
+
+    // Căn chỉnh lại về mục tiêu đúng 1 lần (lúc này section đã nằm trong manager.views nên sẽ nhảy thẳng tới đầu chương)
+    await this.rendition.display(target);
   }
 
   getCurrentCfi(): string | null {

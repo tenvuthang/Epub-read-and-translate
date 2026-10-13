@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    epub_reader_temp_lib::run()
+    epub_reader_lib::run()
 }

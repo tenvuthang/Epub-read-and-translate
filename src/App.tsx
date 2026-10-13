@@ -44,17 +44,22 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   // Current file path for position saving
   const filePathRef = useRef<string>("");
+  // Sequence counter to prevent race condition when opening files concurrently
+  const loadSeqRef = useRef<number>(0);
 
   const handleOpenEpub = useCallback(async () => {
+    // Show file-open dialog filtered to .epub files
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name: "EPUB", extensions: ["epub"] }],
+    });
+
+    if (!selected || typeof selected !== "string") return; // user cancelled
+
+    const currentSeq = ++loadSeqRef.current;
+    let localEngine: ReaderEngine | null = null;
+
     try {
-      // Show file-open dialog filtered to .epub files
-      const selected = await openDialog({
-        multiple: false,
-        filters: [{ name: "EPUB", extensions: ["epub"] }],
-      });
-
-      if (!selected || typeof selected !== "string") return; // user cancelled
-
       setStatus({ type: "loading" });
 
       // Save position for the previously open book
@@ -63,50 +68,68 @@ export default function App() {
         if (cfi) savePosition(filePathRef.current, cfi);
       }
 
-      // Destroy previous engine
+      // Destroy previous active engine
       engineRef.current?.destroy();
       engineRef.current = null;
       setToc([]);
 
       // Read file bytes via Tauri fs plugin
       const bytes = await readFile(selected);
+      if (currentSeq !== loadSeqRef.current) {
+        return;
+      }
       const buffer = bytes.buffer as ArrayBuffer;
 
       if (!containerRef.current) {
-        setStatus({ type: "error", message: "Lỗi nội bộ: không tìm thấy vùng hiển thị." });
+        throw new Error("Lỗi nội bộ: không tìm thấy vùng hiển thị.");
+      }
+
+      // Clear previous container content
+      containerRef.current.innerHTML = "";
+
+      // Create engine and open book
+      localEngine = new EpubJsEngine();
+      const tocItems = await localEngine.open(buffer, containerRef.current);
+
+      if (currentSeq !== loadSeqRef.current) {
+        localEngine.destroy();
         return;
       }
 
-      // Create engine and open book
-      const engine = new EpubJsEngine();
-      engineRef.current = engine;
+      engineRef.current = localEngine;
       filePathRef.current = selected;
-
-      // Clear previous content
-      containerRef.current.innerHTML = "";
-
-      const tocItems = await engine.open(buffer, containerRef.current);
       setToc(tocItems);
 
       // Restore previous position if any
       const savedCfi = loadPosition(selected);
       if (savedCfi) {
-        await engine.goTo(savedCfi).catch(() => {
+        await localEngine.goTo(savedCfi).catch(() => {
           // If restore fails, just stay at beginning — non-fatal
         });
       }
 
-      const fileName = selected.split(/[\\/]/).pop() ?? selected;
-      setStatus({ type: "open", fileName });
+      if (currentSeq === loadSeqRef.current) {
+        const fileName = selected.split(/[\\/]/).pop() ?? selected;
+        setStatus({ type: "open", fileName });
+      }
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Không thể mở file. Có thể file không phải EPUB hợp lệ hoặc bị hỏng.";
-      setStatus({ type: "error", message: msg });
-      engineRef.current?.destroy();
-      engineRef.current = null;
-      setToc([]);
+      if (currentSeq === loadSeqRef.current) {
+        if (localEngine) {
+          localEngine.destroy();
+        }
+        engineRef.current?.destroy();
+        engineRef.current = null;
+        setToc([]);
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Không thể mở file. Có thể file không phải EPUB hợp lệ hoặc bị hỏng.";
+        setStatus({ type: "error", message: msg });
+      }
+    } finally {
+      if (currentSeq === loadSeqRef.current) {
+        setStatus((prev) => (prev.type === "loading" ? { type: "idle" } : prev));
+      }
     }
   }, []);
 
