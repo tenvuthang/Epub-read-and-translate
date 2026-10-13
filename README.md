@@ -23,9 +23,14 @@
 
 ## 🖼️ Giao diện ứng dụng (Screenshots)
 
-> - `docs/images/welcome-screen.png` — Màn hình chào mừng khi khởi động
-> - `docs/images/reading-view.png` — Giao diện đọc sách kèm thanh mục lục (TOC)
-> - `docs/images/error-banner.png` — Giao diện thông báo lỗi khi mở file không hợp lệ
+### 1. Màn hình chào mừng
+![Màn hình chào mừng](docs/images/welcome-screen.png)
+
+### 2. Giao diện đọc sách & Mục lục (Scrolled Mode)
+![Giao diện đọc sách](docs/images/reading-view.png)
+
+### 3. Cảnh báo lỗi khi mở file không hợp lệ
+![Thông báo lỗi file không hợp lệ](docs/images/error-banner.png)
 
 ---
 
