@@ -42,3 +42,4 @@ Xem `docs/DECISIONS.md`.
 ## Câu hỏi còn mở
 - Lưu vị trí đọc trong MVP 0.1: chỉ làm nếu không nặng.
 - Provider dịch: Gemini là hướng đầu tiên; chi tiết pricing/model/rate limit tra cứu lại khi tới milestone dịch.
+- Khôi phục vị trí đọc: đang sửa, MVP 0.1 chưa đóng.

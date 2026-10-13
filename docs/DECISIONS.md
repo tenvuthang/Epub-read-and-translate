@@ -5,7 +5,7 @@
 | 001 | Windows desktop, Tauri 2 | Đã chốt |
 | 002 | React + **TypeScript** + Vite (không dùng JavaScript thuần) | Đã chốt 2026-10-06 |
 | 003 | Reader-first; MVP 0.1 chỉ đọc EPUB | Đã chốt |
-| 004 | Bọc EPUB.js sau interface `ReaderEngine` | **Proposal** |
+| 004 | Bọc EPUB.js sau interface `ReaderEngine` | Đã chốt 2026-10-06 |
 | 005 | Gemini API là provider dịch đầu tiên (giai đoạn sau); OpenRouter chưa chọn | Đã chốt |
 | 006 | `/docs` là source of truth giữa các chat | Đã chốt |
 | 007 | Chế độ đọc: cuộn (scrolled), không phân trang | Đã chốt 2026-10-06 |

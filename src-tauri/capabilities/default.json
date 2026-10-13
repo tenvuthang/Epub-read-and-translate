@@ -6,7 +6,6 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
-    "fs:allow-read-file",
-    "fs:allow-exists"
+    "fs:allow-read-file"
   ]
 }
