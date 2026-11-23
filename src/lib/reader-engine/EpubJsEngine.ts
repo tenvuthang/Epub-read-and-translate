@@ -25,8 +25,17 @@ export class EpubJsEngine implements ReaderEngine {
   private toc: TocItem[] = [];
   private currentCfi: string | null = null;
   private goToSeq = 0;
+  private locationChangeCallback: ((cfi: string) => void) | null = null;
 
-  async open(data: ArrayBuffer, container: HTMLElement): Promise<TocItem[]> {
+  onLocationChange(callback: ((cfi: string) => void) | null): void {
+    this.locationChangeCallback = callback;
+  }
+
+  async open(
+    data: ArrayBuffer,
+    container: HTMLElement,
+    initialLocation?: string
+  ): Promise<TocItem[]> {
     // Clean up any previous book
     this.destroy();
 
@@ -78,11 +87,28 @@ export class EpubJsEngine implements ReaderEngine {
         (location: { start: { cfi: string } }) => {
           if (location?.start?.cfi) {
             this.currentCfi = location.start.cfi;
+            this.locationChangeCallback?.(location.start.cfi);
           }
         }
       );
 
-      await this.rendition.display();
+      let restored = false;
+      if (initialLocation && initialLocation.startsWith("epubcfi(")) {
+        try {
+          await this.rendition.display(initialLocation);
+          const contents = this.rendition.getContents() as unknown as Array<unknown>;
+          if (Array.isArray(contents) && contents.length > 0) {
+            restored = true;
+            await this.realignAfterImagesLoadOnce(initialLocation, ++this.goToSeq);
+          }
+        } catch {
+          restored = false;
+        }
+      }
+
+      if (!restored) {
+        await this.rendition.display();
+      }
       return this.toc;
     })();
 
@@ -209,5 +235,6 @@ export class EpubJsEngine implements ReaderEngine {
     this.rendition = null;
     this.toc = [];
     this.currentCfi = null;
+    this.locationChangeCallback = null;
   }
 }

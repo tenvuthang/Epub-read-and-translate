@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { EpubJsEngine } from "./lib/reader-engine/EpubJsEngine";
@@ -46,6 +46,42 @@ export default function App() {
   const filePathRef = useRef<string>("");
   // Sequence counter to prevent race condition when opening files concurrently
   const loadSeqRef = useRef<number>(0);
+  // Debounce timer for continuous position saving
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushCurrentPosition = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (filePathRef.current && engineRef.current) {
+      const cfi = engineRef.current.getCurrentCfi();
+      if (cfi) savePosition(filePathRef.current, cfi);
+    }
+  }, []);
+
+  const scheduleSavePosition = useCallback((filePath: string, cfi: string) => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      savePosition(filePath, cfi);
+    }, 400);
+  }, []);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      flushCurrentPosition();
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
+      flushCurrentPosition();
+    };
+  }, [flushCurrentPosition]);
 
   const handleOpenEpub = useCallback(async () => {
     // Show file-open dialog filtered to .epub files
@@ -63,10 +99,7 @@ export default function App() {
       setStatus({ type: "loading" });
 
       // Save position for the previously open book
-      if (filePathRef.current && engineRef.current) {
-        const cfi = engineRef.current.getCurrentCfi();
-        if (cfi) savePosition(filePathRef.current, cfi);
-      }
+      flushCurrentPosition();
 
       // Destroy previous active engine
       engineRef.current?.destroy();
@@ -87,9 +120,14 @@ export default function App() {
       // Clear previous container content
       containerRef.current.innerHTML = "";
 
-      // Create engine and open book
+      // Create engine and open book (restoring saved CFI directly if available)
+      const savedCfi = loadPosition(selected);
       localEngine = new EpubJsEngine();
-      const tocItems = await localEngine.open(buffer, containerRef.current);
+      const tocItems = await localEngine.open(
+        buffer,
+        containerRef.current,
+        savedCfi ?? undefined
+      );
 
       if (currentSeq !== loadSeqRef.current) {
         localEngine.destroy();
@@ -98,15 +136,10 @@ export default function App() {
 
       engineRef.current = localEngine;
       filePathRef.current = selected;
+      localEngine.onLocationChange?.((cfi) => {
+        scheduleSavePosition(selected, cfi);
+      });
       setToc(tocItems);
-
-      // Restore previous position if any
-      const savedCfi = loadPosition(selected);
-      if (savedCfi) {
-        await localEngine.goTo(savedCfi).catch(() => {
-          // If restore fails, just stay at beginning — non-fatal
-        });
-      }
 
       if (currentSeq === loadSeqRef.current) {
         const fileName = selected.split(/[\\/]/).pop() ?? selected;
@@ -131,7 +164,7 @@ export default function App() {
         setStatus((prev) => (prev.type === "loading" ? { type: "idle" } : prev));
       }
     }
-  }, []);
+  }, [flushCurrentPosition, scheduleSavePosition]);
 
   const handleNavigate = useCallback((href: string) => {
     engineRef.current?.goTo(href).catch(() => {
@@ -200,11 +233,11 @@ export default function App() {
 
         {/* Reader / Welcome screen */}
         <div className="reader-wrapper">
-          {/* EPUB.js mounts here */}
+          {/* EPUB.js mounts here (kept in layout flow so dimensions are valid during open/restore) */}
           <div
             ref={containerRef}
             className="epub-container"
-            style={{ display: isOpen ? "block" : "none" }}
+            style={{ visibility: isOpen ? "visible" : "hidden" }}
           />
 
           {/* Welcome / empty state */}

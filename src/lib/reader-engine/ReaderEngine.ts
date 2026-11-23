@@ -13,9 +13,17 @@ export interface TocItem {
 export interface ReaderEngine {
   /**
    * Open an EPUB from raw bytes and render into the given DOM element.
+   * Optionally restores an initial CFI location.
    * Returns the table of contents.
    */
-  open(data: ArrayBuffer, container: HTMLElement): Promise<TocItem[]>;
+  open(
+    data: ArrayBuffer,
+    container: HTMLElement,
+    initialLocation?: string
+  ): Promise<TocItem[]>;
+
+  /** Subscribe to location changes (CFI) while reading */
+  onLocationChange?(callback: ((cfi: string) => void) | null): void;
 
   /** Navigate to the next section/spine item */
   next(): Promise<void>;
