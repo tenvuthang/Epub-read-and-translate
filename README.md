@@ -14,6 +14,7 @@
   - Nhảy chính xác tới đầu chương ngay từ lần bấm đầu tiên (tự động chờ tải ảnh và căn chỉnh khung nhìn).
   - Chống xung đột khi bấm chuyển nhanh liên tiếp giữa các mục (không bị nhảy ngược).
   - Có thể đóng/mở thanh bên mục lục để tối ưu không gian đọc.
+- **Lưu & khôi phục vị trí đọc (CFI)**: Tự động lưu vị trí đọc theo từng cuốn sách trong quá trình đọc và trước khi đóng ứng dụng qua `localStorage`, mở lại đúng vị trí cũ (tự động fallback về đầu sách nếu CFI không hợp lệ).
 - **Xử lý lỗi an toàn**:
   - Kiểm tra magic bytes (`0x50 0x4B 0x03 0x04`) trước khi nạp file.
   - Cơ chế timeout 20 giây và chống xung đột (race condition) khi mở nhiều file liên tiếp.
@@ -123,9 +124,11 @@ npm run tauri build
 
 ## 🗺️ Lộ trình phát triển (Roadmap)
 
-- [ ] **MVP 0.1 (Reader — Đang hoàn thiện)**:
-  - [x] Mở và đọc EPUB trên Windows Desktop, cuộn liên tục, mục lục đa cấp chuẩn xác, xử lý lỗi file giả/hỏng, đóng gói bộ cài `.exe` (NSIS).
-  - [ ] Sửa lỗi khôi phục vị trí đọc (CFI) khi đóng và mở lại sách.
+Xem chi tiết lộ trình đầy đủ tại [ROADMAP.md](./ROADMAP.md).
+
+- [ ] **MVP 0.1 (Reader — Chờ kiểm thử bản `.exe`/NSIS)**:
+  - [x] Mở và đọc EPUB trên Windows Desktop, cuộn liên tục, mục lục đa cấp chuẩn xác, xử lý lỗi file giả/hỏng, lưu/khôi phục vị trí đọc (đã kiểm thử trên `tauri dev`), đóng gói bộ cài `.exe` (NSIS).
+  - [ ] Kiểm thử runtime trên bản `.exe` và bộ cài đặt NSIS mới build.
   - [ ] Cân nhắc bổ sung danh sách sách mở gần đây (Proposal).
 - [ ] **Milestone tiếp theo (Lựa chọn)**:
   - Hoàn thiện trải nghiệm Reader.
@@ -136,9 +139,8 @@ npm run tauri build
 
 ## ⚠️ Giới hạn đã biết (Known Limitations)
 
-1. **Khôi phục vị trí đọc**: Tính năng tự động cuộn về vị trí đọc cuối khi mở lại sách đang được sửa (hiện cần bấm chọn một chương trong mục lục khi mở lại sách đã lưu vị trí).
-2. **Sách có DRM**: Không hỗ trợ mở các file EPUB bị khóa bản quyền (Adobe DRM, Apple FairPlay...).
-3. **Sách Fixed-Layout**: Một số sách dàn trang cố định có thể hiển thị khác biệt ở chế độ cuộn dọc.
+1. **Sách có DRM**: Không hỗ trợ mở các file EPUB bị khóa bản quyền (Adobe DRM, Apple FairPlay...).
+2. **Sách Fixed-Layout**: Một số sách dàn trang cố định có thể hiển thị khác biệt ở chế độ cuộn dọc.
 
 ---
 
